@@ -16,40 +16,41 @@
 
 ## 📦 安装
 
-### 方式一：直接运行源码
+### 1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
-python voice_to_text.py
 ```
 
-### 方式二：下载 exe（推荐）
+### 2. 下载模型
 
-从 [Releases](../../releases) 页面下载 `VoiceType.exe`，双击运行即可。
-
-## 🧠 模型下载
-
-首次运行需要下载语音识别模型，共三个：
+首次运行前需要下载语音识别模型：
 
 | 模型 | 大小 | 说明 | 下载地址 |
 |------|------|------|----------|
 | paraformer-zh | ~950MB | 语音识别主模型（必选） | [ModelScope](https://modelscope.cn/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch) |
-| fsmn-vad | ~4MB | 语音活动检测（可选，去掉静音） | [ModelScope](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) |
-| ct-punc | ~1.2GB | 标点恢复（可选，自动加标点） | [ModelScope](https://modelscope.cn/models/iic/punc_ct-transformer_cn-en-common-vocab471067-large) |
+| fsmn-vad | ~4MB | 语音活动检测（可选） | [ModelScope](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) |
+| ct-punc | ~1.2GB | 标点恢复（可选） | [ModelScope](https://modelscope.cn/models/iic/punc_ct-transformer_cn-en-common-vocab471067-large) |
 
-### 安装模型
+### 3. 放置模型
 
-下载后解压到以下目录结构：
+下载后解压到项目目录下的 `models/` 文件夹：
 
 ```
-VoiceType.exe 所在目录/
+voice_to_text.py 所在目录/
 └── models/
-    ├── paraformer-zh/    ← 主模型
+    ├── paraformer-zh/    ← 主模型（必选）
     ├── vad/              ← VAD（可选）
     └── punc/             ← 标点（可选）
 ```
 
 > 💡 只装主模型也能用，VAD 和标点可以按需开启/关闭。
+
+### 4. 运行
+
+```bash
+python voice_to_text.py
+```
 
 ## 🎮 使用
 
@@ -63,22 +64,16 @@ VoiceType.exe 所在目录/
 
 ## ⚙️ 右键菜单
 
-- **加载主模型** — 选择本地模型文件夹
+- **加载主模型** — 选择本地模型文件夹（支持自由加载任意 FunASR 兼容模型）
 - **VAD 语音检测** — 自动切分语音段，去掉静音噪音
 - **标点恢复** — 自动加逗号、句号、问号
 - **更换热键** — 支持 Right Ctrl / Left Ctrl / Alt / F1-F6 等
 
-## 📋 依赖
+## 📋 环境要求
 
-- Python 3.8+（源码运行时需要）
+- Python 3.8+
 - NVIDIA GPU（推荐）或 CPU
 - Windows 10/11
-
-## 🔧 模型说明
-
-- **主模型**：完全由用户自由选择，支持任何 FunASR 兼容的模型
-- **VAD**：可选，帮助模型区分人声和静音
-- **标点恢复**：可选，自动为识别结果添加标点
 
 ## 📄 License
 

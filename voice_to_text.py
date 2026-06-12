@@ -88,21 +88,26 @@ class GlassBall:
         self.root.overrideredirect(True)
         self.root.attributes('-alpha', self.config['opacity'])
 
-        # 透明色
+        # 透明色（仅在非打包模式下使用，打包后可能导致窗口不可见）
         self.transparent_color = '#f0f0f0'
-        self.root.wm_attributes('-transparentcolor', self.transparent_color)
+        if not getattr(sys, 'frozen', False):
+            try:
+                self.root.wm_attributes('-transparentcolor', self.transparent_color)
+            except:
+                pass
 
         # 尺寸
         self.size = 36
         self.pad = 4
 
-        # 画布
+        # 画布（打包后用深色背景代替透明）
+        canvas_bg = '#1a1a2e' if getattr(sys, 'frozen', False) else self.transparent_color
         self.canvas = tk.Canvas(
             self.root,
             width=self.size + self.pad * 2,
             height=self.size + self.pad * 2,
             highlightthickness=0,
-            bg=self.transparent_color
+            bg=canvas_bg
         )
         self.canvas.pack()
 
@@ -298,6 +303,13 @@ class GlassBall:
         self.register_hotkey()
 
     def set_state(self, state):
+        """线程安全：通过 root.after 调度到主线程"""
+        try:
+            self.root.after(0, self._apply_state, state)
+        except:
+            pass
+
+    def _apply_state(self, state):
         fill, outline = self.colors[state]
         self.canvas.itemconfig(self.inner, fill=fill, outline=outline)
         if state == 'processing':
