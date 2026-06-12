@@ -154,6 +154,7 @@ class GlassBall:
         self.stream = None
         self.pa = None
         self.model_loaded = False
+        self.model_loading = False
         self.current_hotkey = self.config['hotkey']
         self.animating = False
 
@@ -179,10 +180,14 @@ class GlassBall:
             pass
 
     def start_drag(self, event):
+        if self.model_loading:
+            return
         self.drag_data["x"] = event.x
         self.drag_data["y"] = event.y
 
     def do_drag(self, event):
+        if self.model_loading:
+            return
         x = self.root.winfo_x() + event.x - self.drag_data["x"]
         y = self.root.winfo_y() + event.y - self.drag_data["y"]
         self.root.geometry(f"+{x}+{y}")
@@ -310,6 +315,8 @@ class GlassBall:
         except:
             device_menu.add_command(label="(获取设备失败)", state="disabled")
         menu.add_cascade(label="麦克风设备", menu=device_menu)
+
+        menu.add_separator()
         menu.add_command(label="退出", command=self.root.quit, foreground='#ff6b6b')
 
         menu.post(event.x_root, event.y_root)
@@ -478,6 +485,7 @@ class GlassBall:
 
     def load_model(self):
         """首次加载模型"""
+        self.model_loading = True
         self.set_state('processing')
 
         # 优先级：用户自定义 > 同目录 models/ > 提示用户选择
@@ -509,7 +517,6 @@ class GlassBall:
     def _do_load_model(self, model_path):
         """实际加载模型"""
         try:
-            # 每隔一段时间让出 CPU，保证主线程事件循环不被卡死
             def yield_cpu():
                 time.sleep(0.01)
 
@@ -547,11 +554,10 @@ class GlassBall:
 
             self.model = AutoModel(**kwargs)
             yield_cpu()
-
-            # 在主线程初始化音频，避免后台线程阻塞 UI 事件循环
             self.root.after(0, self._init_audio)
         except Exception as e:
             self.model_loaded = False
+            self.model_loading = False
             self.set_state('idle')
             self.root.after(0, lambda: messagebox.showerror(
                 "模型加载失败",
@@ -578,9 +584,11 @@ class GlassBall:
                 stream_kwargs['input_device_index'] = device_index
             self.stream = self.pa.open(**stream_kwargs)
             self.model_loaded = True
+            self.model_loading = False
             self.set_state('idle')
         except Exception as e:
             self.model_loaded = False
+            self.model_loading = False
             self.set_state('idle')
             messagebox.showerror(
                 "音频初始化失败",
