@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# 模型文件（太大，不上传）
+models/
+
+# 配置文件（含用户设置）
+voice_config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 原始图标
+icon.webp
