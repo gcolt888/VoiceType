@@ -40,9 +40,13 @@ DEFAULT_CONFIG = {
     "opacity": 0.75,
     "model_path": "",           # 主模型本地路径（空=未设置）
     "model_name": "",           # 显示用的模型名称
+    "vad_path": "",             # VAD 模型本地路径（空=自动查找）
+    "vad_name": "",             # 显示用的 VAD 名称
+    "punc_path": "",            # 标点模型本地路径（空=自动查找）
+    "punc_name": "",            # 显示用的标点名称
     "use_vad": True,
     "use_punc": True,
-    "first_run": True,          # 首次运行标记
+    "first_run": True,
 }
 
 def load_config():
@@ -212,10 +216,21 @@ class GlassBall:
 
         # === VAD ===
         vad_state = "✓ 开" if self.config.get('use_vad', True) else "✗ 关"
+        vad_name = self.config.get('vad_name', '')
+        vad_display = f" ({vad_name})" if vad_name else ""
         vad_menu = tk.Menu(menu, tearoff=0, **menu_style)
+        vad_menu.add_command(
+            label=f"当前: {vad_state}{vad_display}",
+            state="disabled", foreground='#888888'
+        )
         vad_menu.add_command(
             label="说明: 自动切分语音段，去掉静音噪音",
             state="disabled", foreground='#666666'
+        )
+        vad_menu.add_separator()
+        vad_menu.add_command(
+            label="📁 选择 VAD 模型文件夹...",
+            command=self.browse_vad
         )
         vad_menu.add_separator()
         vad_menu.add_command(
@@ -230,10 +245,21 @@ class GlassBall:
 
         # === 标点 ===
         punc_state = "✓ 开" if self.config.get('use_punc', True) else "✗ 关"
+        punc_name = self.config.get('punc_name', '')
+        punc_display = f" ({punc_name})" if punc_name else ""
         punc_menu = tk.Menu(menu, tearoff=0, **menu_style)
+        punc_menu.add_command(
+            label=f"当前: {punc_state}{punc_display}",
+            state="disabled", foreground='#888888'
+        )
         punc_menu.add_command(
             label="说明: 自动加逗号、句号、问号",
             state="disabled", foreground='#666666'
+        )
+        punc_menu.add_separator()
+        punc_menu.add_command(
+            label="📁 选择标点模型文件夹...",
+            command=self.browse_punc
         )
         punc_menu.add_separator()
         punc_menu.add_command(
@@ -268,7 +294,7 @@ class GlassBall:
     def browse_model(self):
         """浏览选择本地模型文件夹"""
         folder = filedialog.askdirectory(
-            title="选择模型文件夹",
+            title="选择主模型文件夹",
             initialdir=MODELS_DIR if os.path.exists(MODELS_DIR) else APP_DIR
         )
         if folder:
@@ -282,6 +308,44 @@ class GlassBall:
                     "模型无效",
                     "所选文件夹不是有效的模型目录。\n\n"
                     "请确保文件夹内包含 .onnx 或 config.yaml 文件。"
+                )
+
+    def browse_vad(self):
+        """浏览选择 VAD 模型文件夹"""
+        folder = filedialog.askdirectory(
+            title="选择 VAD 模型文件夹",
+            initialdir=MODELS_DIR if os.path.exists(MODELS_DIR) else APP_DIR
+        )
+        if folder:
+            if is_valid_model_path(folder):
+                self.config['vad_path'] = folder
+                self.config['vad_name'] = os.path.basename(folder)
+                self.config['use_vad'] = True
+                save_config(self.config)
+                threading.Thread(target=self.reload_model, daemon=True).start()
+            else:
+                messagebox.showerror(
+                    "模型无效",
+                    "所选文件夹不是有效的 VAD 模型目录。"
+                )
+
+    def browse_punc(self):
+        """浏览选择标点模型文件夹"""
+        folder = filedialog.askdirectory(
+            title="选择标点模型文件夹",
+            initialdir=MODELS_DIR if os.path.exists(MODELS_DIR) else APP_DIR
+        )
+        if folder:
+            if is_valid_model_path(folder):
+                self.config['punc_path'] = folder
+                self.config['punc_name'] = os.path.basename(folder)
+                self.config['use_punc'] = True
+                save_config(self.config)
+                threading.Thread(target=self.reload_model, daemon=True).start()
+            else:
+                messagebox.showerror(
+                    "模型无效",
+                    "所选文件夹不是有效的标点模型目录。"
                 )
 
     def toggle_vad(self, enabled):
@@ -373,14 +437,16 @@ class GlassBall:
         """首次加载模型"""
         self.set_state('processing')
 
-        # 检查是否有保存的模型路径
+        # 优先级：用户自定义 > 同目录 models/ > 提示用户选择
         model_path = self.config.get('model_path', '')
+        if not model_path or not is_valid_model_path(model_path):
+            local_model = os.path.join(MODELS_DIR, "paraformer-zh")
+            if is_valid_model_path(local_model):
+                model_path = local_model
 
         if model_path and is_valid_model_path(model_path):
-            # 从本地加载
             self._do_load_model(model_path)
         else:
-            # 没有模型，提示用户
             self.root.after(0, self.show_no_model_dialog)
 
     def show_no_model_dialog(self):
@@ -407,16 +473,26 @@ class GlassBall:
             }
 
             if self.config.get('use_vad', True):
-                vad_path = os.path.join(MODELS_DIR, "vad")
-                if is_valid_model_path(vad_path):
+                # 优先级：用户自定义 > 同目录 models/ > 网络下载
+                vad_path = self.config.get('vad_path', '')
+                if not vad_path or not is_valid_model_path(vad_path):
+                    local_vad = os.path.join(MODELS_DIR, "vad")
+                    if is_valid_model_path(local_vad):
+                        vad_path = local_vad
+                if vad_path and is_valid_model_path(vad_path):
                     kwargs["vad_model"] = vad_path
                 else:
                     kwargs["vad_model"] = "fsmn-vad"
                     kwargs["vad_model_revision"] = "v2.0.4"
 
             if self.config.get('use_punc', True):
-                punc_path = os.path.join(MODELS_DIR, "punc")
-                if is_valid_model_path(punc_path):
+                # 优先级：用户自定义 > 同目录 models/ > 网络下载
+                punc_path = self.config.get('punc_path', '')
+                if not punc_path or not is_valid_model_path(punc_path):
+                    local_punc = os.path.join(MODELS_DIR, "punc")
+                    if is_valid_model_path(local_punc):
+                        punc_path = local_punc
+                if punc_path and is_valid_model_path(punc_path):
                     kwargs["punc_model"] = punc_path
                 else:
                     kwargs["punc_model"] = "ct-punc"
@@ -451,7 +527,13 @@ class GlassBall:
         self.model_loaded = False
         self.set_state('processing')
 
+        # 优先级：用户自定义 > 同目录 models/
         model_path = self.config.get('model_path', '')
+        if not model_path or not is_valid_model_path(model_path):
+            local_model = os.path.join(MODELS_DIR, "paraformer-zh")
+            if is_valid_model_path(local_model):
+                model_path = local_model
+
         if model_path and is_valid_model_path(model_path):
             self._do_load_model(model_path)
         else:

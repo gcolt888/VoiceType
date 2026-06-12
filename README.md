@@ -14,17 +14,29 @@
 - ⚙️ 右键菜单，支持自定义热键、模型选择、VAD/标点开关
 - 🖱️ 可拖动，置顶显示
 
-## 📦 安装
+## 🚀 新电脑安装指南
 
-### 1. 安装依赖
+### 第一步：安装 Python
+
+1. 下载 Python 3.8+：https://www.python.org/downloads/
+2. 安装时 **务必勾选** "Add Python to PATH"
+3. 验证安装：打开 cmd，输入 `python --version`
+
+### 第二步：安装显卡驱动
+
+1. 如果有 NVIDIA 显卡，去 https://www.nvidia.com/drivers 下载驱动
+2. 安装完重启电脑
+3. 验证：打开 cmd，输入 `nvidia-smi`，能看到显卡信息就说明装好了
+
+### 第三步：安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 下载模型
+> 💡 首次安装会下载 PyTorch（约2GB），需要联网，耐心等待。
 
-首次运行前需要下载语音识别模型：
+### 第四步：下载模型
 
 | 模型 | 大小 | 说明 | 下载地址 |
 |------|------|------|----------|
@@ -32,7 +44,7 @@ pip install -r requirements.txt
 | fsmn-vad | ~4MB | 语音活动检测（可选） | [ModelScope](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) |
 | ct-punc | ~1.2GB | 标点恢复（可选） | [ModelScope](https://modelscope.cn/models/iic/punc_ct-transformer_cn-en-common-vocab471067-large) |
 
-### 3. 放置模型
+### 第五步：放置模型
 
 下载后解压到项目目录下的 `models/` 文件夹：
 
@@ -46,7 +58,7 @@ voice_to_text.py 所在目录/
 
 > 💡 只装主模型也能用，VAD 和标点可以按需开启/关闭。
 
-### 4. 运行
+### 第六步：运行
 
 ```bash
 python voice_to_text.py
@@ -71,9 +83,23 @@ python voice_to_text.py
 
 ## 📋 环境要求
 
-- Python 3.8+
-- NVIDIA GPU（推荐）或 CPU
-- Windows 10/11
+| 组件 | 要求 | 说明 |
+|------|------|------|
+| Python | 3.8+ | 必须安装并添加到 PATH |
+| 显卡驱动 | NVIDIA 最新版 | 有 NVIDIA 显卡必须装 |
+| CUDA | 不用单独装 | PyTorch 会自带 |
+| 系统 | Windows 10/11 | Linux/macOS 未测试 |
+
+## ❓ 常见问题
+
+**Q: 没有 NVIDIA 显卡能用吗？**
+A: 可以，把代码里的 `device="cuda"` 改成 `device="cpu"`，但识别速度会慢很多。
+
+**Q: 模型下载太慢怎么办？**
+A: 用浏览器直接从 ModelScope 下载，比代码内下载快。
+
+**Q: 换新电脑怎么办？**
+A: 复制整个文件夹（含 models/）过去，装好 Python 和显卡驱动就能用。
 
 ## 📄 License
 
