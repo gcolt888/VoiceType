@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
     "use_vad": True,
     "use_punc": True,
     "first_run": True,
+    "input_device": -1,         # 音频输入设备索引，-1=系统默认
 }
 
 def load_config():
@@ -287,6 +288,28 @@ class GlassBall:
         menu.add_cascade(label="更换热键", menu=hotkey_menu)
 
         menu.add_separator()
+
+        # === 麦克风设备 ===
+        current_device = self.config.get('input_device', -1)
+        device_menu = tk.Menu(menu, tearoff=0, **menu_style)
+        device_menu.add_command(
+            label="系统默认 ✓" if current_device == -1 else "系统默认",
+            command=lambda: self.change_input_device(-1)
+        )
+        device_menu.add_separator()
+        try:
+            devices = self.get_input_devices()
+            for idx, name in devices:
+                mark = " ✓" if idx == current_device else ""
+                # 截断过长的设备名
+                display_name = name if len(name) <= 30 else name[:27] + "..."
+                device_menu.add_command(
+                    label=display_name + mark,
+                    command=lambda i=idx: self.change_input_device(i)
+                )
+        except:
+            device_menu.add_command(label="(获取设备失败)", state="disabled")
+        menu.add_cascade(label="麦克风设备", menu=device_menu)
         menu.add_command(label="退出", command=self.root.quit, foreground='#ff6b6b')
 
         menu.post(event.x_root, event.y_root)
@@ -366,6 +389,25 @@ class GlassBall:
         save_config(self.config)
         self.register_hotkey()
 
+    def get_input_devices(self):
+        """获取所有音频输入设备"""
+        devices = []
+        pa = pyaudio.PyAudio()
+        try:
+            for i in range(pa.get_device_count()):
+                info = pa.get_device_info_by_index(i)
+                if info['maxInputChannels'] > 0:
+                    devices.append((i, info['name']))
+        finally:
+            pa.terminate()
+        return devices
+
+    def change_input_device(self, device_index):
+        self.config['input_device'] = device_index
+        save_config(self.config)
+        if self.model_loaded:
+            threading.Thread(target=self.reload_model, daemon=True).start()
+
     def set_state(self, state):
         """线程安全：通过 root.after 调度到主线程"""
         try:
@@ -376,9 +418,10 @@ class GlassBall:
     def _apply_state(self, state):
         fill, outline = self.colors[state]
         self.canvas.itemconfig(self.inner, fill=fill, outline=outline)
-        if state == 'processing':
+        # processing 状态不播动画，只显示静态颜色，避免加载模型时画布刷新导致拖动抖动
+        if state == 'recording':
             self.animating = True
-            self.pulse_animation('processing')
+            self.pulse_animation('recording')
         else:
             self.animating = False
 
@@ -466,6 +509,10 @@ class GlassBall:
     def _do_load_model(self, model_path):
         """实际加载模型"""
         try:
+            # 每隔一段时间让出 CPU，保证主线程事件循环不被卡死
+            def yield_cpu():
+                time.sleep(0.01)
+
             kwargs = {
                 "model": model_path,
                 "device": "cuda",
@@ -473,7 +520,6 @@ class GlassBall:
             }
 
             if self.config.get('use_vad', True):
-                # 优先级：用户自定义 > 同目录 models/ > 网络下载
                 vad_path = self.config.get('vad_path', '')
                 if not vad_path or not is_valid_model_path(vad_path):
                     local_vad = os.path.join(MODELS_DIR, "vad")
@@ -484,9 +530,9 @@ class GlassBall:
                 else:
                     kwargs["vad_model"] = "fsmn-vad"
                     kwargs["vad_model_revision"] = "v2.0.4"
+            yield_cpu()
 
             if self.config.get('use_punc', True):
-                # 优先级：用户自定义 > 同目录 models/ > 网络下载
                 punc_path = self.config.get('punc_path', '')
                 if not punc_path or not is_valid_model_path(punc_path):
                     local_punc = os.path.join(MODELS_DIR, "punc")
@@ -497,9 +543,24 @@ class GlassBall:
                 else:
                     kwargs["punc_model"] = "ct-punc"
                     kwargs["punc_model_revision"] = "v2.0.4"
+            yield_cpu()
 
             self.model = AutoModel(**kwargs)
+            yield_cpu()
 
+            # 在主线程初始化音频，避免后台线程阻塞 UI 事件循环
+            self.root.after(0, self._init_audio)
+        except Exception as e:
+            self.model_loaded = False
+            self.set_state('idle')
+            self.root.after(0, lambda: messagebox.showerror(
+                "模型加载失败",
+                f"无法加载模型:\n{str(e)}\n\n请检查模型文件夹是否完整。"
+            ))
+
+    def _init_audio(self):
+        """在主线程初始化 PyAudio（避免拖动卡顿）"""
+        try:
             if self.stream:
                 try:
                     self.stream.stop_stream()
@@ -508,19 +569,23 @@ class GlassBall:
                     pass
 
             self.pa = pyaudio.PyAudio()
-            self.stream = self.pa.open(
+            device_index = self.config.get('input_device', -1)
+            stream_kwargs = dict(
                 format=pyaudio.paInt16, channels=1, rate=16000,
                 input=True, frames_per_buffer=1024
             )
+            if device_index >= 0:
+                stream_kwargs['input_device_index'] = device_index
+            self.stream = self.pa.open(**stream_kwargs)
             self.model_loaded = True
             self.set_state('idle')
         except Exception as e:
             self.model_loaded = False
             self.set_state('idle')
-            self.root.after(0, lambda: messagebox.showerror(
-                "模型加载失败",
-                f"无法加载模型:\n{str(e)}\n\n请检查模型文件夹是否完整。"
-            ))
+            messagebox.showerror(
+                "音频初始化失败",
+                f"无法打开麦克风:\n{str(e)}\n\n请检查麦克风设备是否被占用。"
+            )
 
     def reload_model(self):
         """重新加载模型（切换设置后调用）"""

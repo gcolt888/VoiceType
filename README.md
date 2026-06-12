@@ -61,7 +61,7 @@ voice_to_text.py 所在目录/
 ### 第六步：运行
 
 ```bash
-python voice_to_text.py
+pythonw voice_to_text.py
 ```
 
 ## 🎮 使用
